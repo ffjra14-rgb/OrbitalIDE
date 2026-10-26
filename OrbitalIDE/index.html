@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>OrbitalIDE — 3D файловый менеджер</title>
+
+  <link rel="stylesheet" href="vendor/codemirror.css">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Three.js подключается как ES-модуль из локальной папки vendor -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- Экран подключения к рабочей папке -->
+  <div id="boot" class="boot">
+    <div class="boot-orbit" aria-hidden="true"><span></span></div>
+    <div class="boot-brand">ORBITALIDE</div>
+    <div id="bootTitle" class="boot-title">Подключаюсь к рабочей папке…</div>
+    <div id="bootPath" class="boot-path"></div>
+    <button id="bootRetry" class="ghost-btn hidden">Повторить</button>
+  </div>
+
+  <!-- 3D-сцена -->
+  <canvas id="scene" aria-label="Трёхмерная карта файлов"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+  <div id="warp" class="warp" aria-hidden="true"></div>
+
+  <!-- Шапка -->
+  <header id="topbar">
+    <button id="backBtn" class="icon-btn" title="На уровень выше" aria-label="На уровень выше">←</button>
+
+    <div class="heading">
+      <nav id="crumbs" class="crumbs" aria-label="Путь к папке"></nav>
+      <h1 id="folderTitle">project</h1>
+      <div id="folderMeta" class="folder-meta">—</div>
+    </div>
+
+    <div class="top-actions">
+      <button id="newFolderBtn" class="ghost-btn" title="Создать папку">
+        <span class="btn-icon">＋</span><span class="btn-text">Папка</span>
+      </button>
+      <button id="newFileBtn" class="ghost-btn" title="Создать файл">
+        <span class="btn-icon">＋</span><span class="btn-text">Файл</span>
+      </button>
+      <button id="resetBtn" class="icon-btn small" title="Обновить дерево с диска" aria-label="Обновить дерево с диска">⟲</button>
+    </div>
+  </header>
+
+  <!-- Легенда типов файлов -->
+  <aside id="legend" class="legend" aria-label="Легенда">
+    <div class="legend-title">Типы файлов</div>
+    <div class="legend-grid">
+      <span class="legend-item"><i style="--c:#63d8a2"></i>.py</span>
+      <span class="legend-item"><i style="--c:#6aa8ff"></i>.cpp</span>
+      <span class="legend-item"><i style="--c:#f5d76e"></i>.js</span>
+      <span class="legend-item"><i style="--c:#ff8a5c"></i>.html</span>
+      <span class="legend-item"><i style="--c:#c792ea"></i>.css</span>
+      <span class="legend-item"><i style="--c:#8ee06b"></i>.json</span>
+      <span class="legend-item"><i style="--c:#dfe9ff"></i>.md</span>
+      <span class="legend-item"><i style="--c:#59e1ff"></i>папка</span>
+    </div>
+    <div class="legend-sep"></div>
+    <div class="legend-note">Цвет и форма узла зависят от типа</div>
+  </aside>
+
+  <!-- Подсказки внизу -->
+  <div id="hintbar" class="hintbar">
+    <span><kbd>ЛКМ</kbd> открыть</span>
+    <span class="hint-sep"></span>
+    <span><kbd>drag</kbd> оттянуть узел</span>
+    <span class="hint-sep"></span>
+    <span><kbd>ПКМ</kbd> меню</span>
+    <span class="hint-sep"></span>
+    <span><kbd>колесо</kbd> масштаб</span>
+  </div>
+
+  <div id="emptyHint" class="empty-hint hidden">
+    <div class="empty-orbit" aria-hidden="true"><span></span></div>
+    <div class="empty-title">Папка пуста</div>
+    <div class="empty-text">Кликните правой кнопкой по пустому месту,<br>чтобы создать первую папку или файл на диске.</div>
+  </div>
+
+  <!-- Контекстное меню -->
+  <div id="contextMenu" class="context-menu hidden" role="menu"></div>
+
+  <!-- Модальное окно -->
+  <div id="modalRoot" class="modal-root hidden" role="presentation">
+    <div class="modal-backdrop" data-close="1"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-glow" aria-hidden="true"></div>
+      <h2 id="modalTitle">Создать папку</h2>
+      <p id="modalSubtitle" class="modal-subtitle"></p>
+      <form id="modalForm" novalidate>
+        <div id="modalFields"></div>
+        <div class="modal-actions">
+          <button type="button" class="ghost-btn" data-close="1">Отмена</button>
+          <button type="submit" class="primary-btn" id="modalSubmit">Создать</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Встроенный редактор -->
+  <section id="editorPanel" class="editor-panel" aria-hidden="true">
+    <div class="editor-head">
+      <div class="editor-file">
+        <span class="file-dot" id="editorDot"></span>
+        <div class="editor-file-text">
+          <div class="editor-name" id="editorName">file.js</div>
+          <div class="editor-path" id="editorPath">/file.js</div>
+        </div>
+      </div>
+      <div class="editor-actions">
+        <span id="dirtyDot" class="dirty-dot" title="Есть несохранённые изменения"></span>
+        <button id="saveBtn" class="ghost-btn" title="Сохранить (Ctrl+S)">Сохранить</button>
+        <button id="closeEditorBtn" class="icon-btn small" title="Закрыть редактор" aria-label="Закрыть редактор">✕</button>
+      </div>
+    </div>
+    <div id="cmHost" class="cm-host"></div>
+    <div class="editor-foot">
+      <span id="editorStatus">Ctrl+S — сохранить</span>
+      <span id="editorLang" class="editor-lang">Text</span>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- CodeMirror 5 (локальная копия) -->
+  <script src="vendor/codemirror.js"></script>
+  <script src="vendor/modes/clike.js"></script>
+  <script src="vendor/modes/javascript.js"></script>
+  <script src="vendor/modes/python.js"></script>
+  <script src="vendor/modes/xml.js"></script>
+  <script src="vendor/modes/css.js"></script>
+  <script src="vendor/modes/htmlmixed.js"></script>
+  <script src="vendor/modes/markdown.js"></script>
+  <script src="vendor/modes/shell.js"></script>
+  <script src="vendor/modes/yaml.js"></script>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
